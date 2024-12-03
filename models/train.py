@@ -11,7 +11,7 @@ def load_dataset():
   sentiment_keys = [key for key in info.features.keys() if isinstance(info.features[key], tfds.features.ClassLabel) or key not in ["comment_text"]]
   return train_dataset, val_dataset, test_dataset, sentiment_keys
 
-def preprocess_dataset(dataset, sentiment_keys, max_length=128, batch_size=128):
+def preprocess_dataset(dataset, sentiment_keys, max_length=128, batch_size=32):
   tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 
   def encode(text, labels):
