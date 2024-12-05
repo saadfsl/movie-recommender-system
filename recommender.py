@@ -2,6 +2,27 @@ import random
 from transformers import BertTokenizer, TFBertForSequenceClassification
 import tensorflow as tf
 import requests
+import numpy as np
+import itertools
+
+class QAgent:
+  def __init__(self, genres):
+    self.genres = genres
+    self.q_table = {tuple(action): 0.0 for action in genres}
+    self.learning_rate = 0.1 # alpha
+    self.discount_factor = 0.9 # gamma
+    self.exploration_rate = 0.2 # epsilon
+
+  def get_action(self):
+    if random.random() < self.exploration_rate:
+      return random.choice(self.genres)
+    else:
+      return max(self.q_table, key=self.q_table.get)
+    
+  def update_q_value(self, genre, reward):
+    old = self.q_table[genre]
+    # immediate reward only (short-term)
+    self.q_table[genre] = old + self.learning_rate * (reward - old)
 
 def load_model(model_path):
   model = TFBertForSequenceClassification.from_pretrained(model_path)
@@ -62,26 +83,31 @@ def map_to_genre(sentiment, threshold=0.01):
       genres.update(SENTIMENT_TO_GENRE[key])
   return list(genres)
 
-def get_movie_recommendations(genres, api_key, num_movies=5):
-  url = "https://api.themoviedb.org/3/discover/movie"
-  params = {
-    "api_key": api_key,
-    "language": "en-US",
-    "sort_by": "popularity.desc",
-    "with_genres": ",".join(str(genre) for genre in genres)
-  }
+def get_movie_recommendations(genres, api_key, pool, current_page, num_movies=5):
+  if len(pool) < num_movies:
+    url = "https://api.themoviedb.org/3/discover/movie"
+    params = {
+      "api_key": api_key,
+      "language": "en-US",
+      "sort_by": "popularity.desc",
+      "with_genres": ",".join(str(genre) for genre in genres),
+      "page": current_page
+    }
 
-  response = requests.get(url, params=params)
+    response = requests.get(url, params=params)
 
-  if response.status_code == 200:
-    movies = response.json()["results"][:20]
-    random.shuffle(movies)
-    selected_movies = movies[:num_movies]
-    return selected_movies
-  else:
-    print("Failed to fetch movie recommendations: ", response.status_code)
-    return []
-  
+    if response.status_code == 200:
+      movies = response.json()["results"]
+      random.shuffle(movies)
+      pool.extend(movies)
+    else:
+      print("Failed to fetch movie recommendations: ", response.status_code)
+
+  # return next batch of movies and remove them from the pool
+  next_batch = pool[:num_movies]
+  del pool[:num_movies]
+  return next_batch
+    
 if __name__ == "__main__":
   model_path = "models/sentiment_model"
   model, tokenizer = load_model(model_path)
@@ -91,24 +117,49 @@ if __name__ == "__main__":
   text = input("Describe your current mood: ")
 
   sentiment = predict_sentiment(text, model, tokenizer, sentiment_keys)
-  print
-  # print as a readable table
-  print("{:<15} | {}".format("Sentiment", "Probability"))
-  print("-" * 30)
-  for key, value in sentiment.items():
-    if value >= 0.01:
-      print("{:<15} | {:.2f}".format(key, value))
-  print()
-
   genres = map_to_genre(sentiment)
-  print("Genres: ", genres)
-  print()
+  print("Initial Genres: ", genres)
 
-  recs = get_movie_recommendations(genres, tmdb_api_key)
-  print("Recommended Movies:")
-  for rec in recs:
-    print(f"{rec['title']} ({rec['release_date'][:4]})")
-    print(rec["overview"])
-    print()
+  genre_combinations = []
+  for i in range(1, len(genres) + 1):
+    genre_combinations.extend(list(itertools.combinations(genres, i)))
+  print("Possible Genre Combinations: ", genre_combinations)
+
+  # RL agent
+  agent = QAgent(genre_combinations)
+
+  movie_pool = []
+  current_page = 1
+
+  while True:
+    selected_combo = agent.get_action()
+    print(f"Selected Genre: {selected_combo}")
+
+    recs = get_movie_recommendations(selected_combo, tmdb_api_key, movie_pool, current_page)
+    current_page += 1
+    print("Recommended Movies:")
+    for i, rec in enumerate(recs):
+      print(f"{i + 1}. {rec['title']} ({rec['release_date'][:4]})")
+      print(rec["overview"])
+      print()
+
+    # get feedback
+    feedback = input("Did you like the recommendations? (yes/no): ").strip().lower()
+    if feedback == "yes":
+      reward = 1
+    else:
+      reward = -1
+
+    # update q-value
+    agent.update_q_value(selected_combo, reward)
+
+    cont = input("Do you want to see more movies from the same genres? (yes/no): ").strip().lower()
+    if cont != "yes":
+      # reset movie pool and current page
+      movie_pool = []
+      current_page = 1
+      cont = input("Do you want a new recommendation? (yes/no): ").strip().lower()
+      if cont != "yes":
+        break
 
 

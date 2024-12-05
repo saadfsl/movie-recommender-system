@@ -74,8 +74,8 @@ if __name__ == "__main__":
   print("Loading dataset...")
   train_dataset, val_dataset, test_dataset, sentiment_keys = load_dataset()
   print("Sentiment Keys: ", sentiment_keys)
+
   print("Preprocessing dataset...")
-  
   train_dataset = preprocess_dataset(train_dataset, sentiment_keys)
   val_dataset = preprocess_dataset(val_dataset, sentiment_keys)
   test_dataset = preprocess_dataset(test_dataset, sentiment_keys)
