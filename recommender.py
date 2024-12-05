@@ -2,7 +2,6 @@ import random
 from transformers import BertTokenizer, TFBertForSequenceClassification
 import tensorflow as tf
 import requests
-import numpy as np
 import itertools
 
 class QAgent:

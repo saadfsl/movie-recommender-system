@@ -1,7 +1,6 @@
 from transformers import BertTokenizer, TFBertForSequenceClassification, AdamWeightDecay
 import tensorflow as tf
 import tensorflow_datasets as tfds
-import numpy as np
 
 def load_dataset():
   dataset, info = tfds.load("goemotions", with_info=True)
