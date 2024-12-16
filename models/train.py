@@ -1,6 +1,8 @@
-from transformers import BertTokenizer, TFBertForSequenceClassification, AdamWeightDecay
+from transformers import BertTokenizer, TFBertForSequenceClassification, create_optimizer
 import tensorflow as tf
 import tensorflow_datasets as tfds
+from sklearn.metrics import classification_report
+import numpy as np
 
 def load_dataset():
   dataset, info = tfds.load("goemotions", with_info=True)
@@ -10,18 +12,18 @@ def load_dataset():
   sentiment_keys = [key for key in info.features.keys() if isinstance(info.features[key], tfds.features.ClassLabel) or key not in ["comment_text"]]
   return train_dataset, val_dataset, test_dataset, sentiment_keys
 
-def preprocess_dataset(dataset, sentiment_keys, max_length=128, batch_size=32):
+def preprocess_dataset(dataset, sentiment_keys, max_length=128, batch_size=16):
   tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 
   def encode(text, labels):
     text = text.numpy().decode("utf-8")
-    labels = labels.numpy() 
+
     tokens = tokenizer(
       text,
       max_length=max_length,
       padding="max_length",
       truncation=True,
-      return_tensors="tf"
+      return_tensors="np"
     )
     return tokens["input_ids"][0], tokens["attention_mask"][0], labels
 
@@ -39,9 +41,9 @@ def preprocess_dataset(dataset, sentiment_keys, max_length=128, batch_size=32):
     labels.set_shape([len(sentiment_keys)])
     return {"input_ids": input_ids, "attention_mask": attention_mask}, labels
 
-  dataset = dataset.map(map_func)
+  dataset = dataset.map(map_func, num_parallel_calls=tf.data.AUTOTUNE)
   dataset = dataset.cache()
-  dataset = dataset.shuffle(batch_size * 10).batch(batch_size)
+  dataset = dataset.shuffle(buffer_size=10000).padded_batch(batch_size, padded_shapes=({'input_ids': [None], 'attention_mask': [None]}, [None]))
   dataset = dataset.prefetch(tf.data.AUTOTUNE)
   return dataset
 
@@ -52,11 +54,32 @@ def train_model(train_dataset, val_dataset, num_labels, epochs=3):
     problem_type="multi_label_classification",
   )
 
-  optimizer = tf.keras.optimizers.legacy.Adam(learning_rate=5e-5)
-  loss = tf.keras.losses.BinaryCrossentropy(from_logits=True)
-  model.compile(optimizer=optimizer, loss=loss, metrics=["accuracy"])
+  steps_per_epoch = tf.data.experimental.cardinality(train_dataset).numpy()
+  total_steps = steps_per_epoch * epochs
+  warmup_steps = int(0.1 * total_steps)
 
-  model.fit(train_dataset, validation_data=val_dataset, epochs=epochs)
+  optimizer, schedule = create_optimizer(
+    init_lr=2e-5,
+    num_train_steps=total_steps,
+    num_warmup_steps=warmup_steps,
+    weight_decay_rate=0.01
+  )
+
+  loss = tf.keras.losses.BinaryCrossentropy(from_logits=True)
+  model.compile(optimizer=optimizer, loss=loss, metrics=["accuracy", "AUC"])
+
+  early_stopping = tf.keras.callbacks.EarlyStopping(
+    monitor="val_loss",
+    patience=3,
+    restore_best_weights=True
+  )
+
+  model.fit(
+    train_dataset,
+    validation_data=val_dataset,
+    epochs=epochs,
+    callbacks=[early_stopping]
+  )
 
   return model
 
@@ -65,9 +88,25 @@ def save_model(model, model_path):
   model.save_pretrained(model_path)
 
 def evaluate_model(model, test_dataset):
-  loss, accuracy = model.evaluate(test_dataset)
+  loss, accuracy, auc = model.evaluate(test_dataset)
   print(f"Loss: {loss}")
   print(f"Accuracy: {accuracy}")
+  print(f"AUC: {auc}")
+
+def classification_report_model(model, dataset, sentiment_keys):
+  true_labels = []
+  pred_labels = []
+  for batch in dataset:
+    x, y = batch
+    logits = model(x, training=False).logits
+    probabilities = tf.nn.sigmoid(logits)
+    true_labels.append(y.numpy())
+    pred_labels.append((probabilities.numpy() > 0.5).astype(int))
+
+  true_labels = np.concatenate(true_labels, axis=0)
+  pred_labels = np.concatenate(pred_labels, axis=0)
+  report = classification_report(true_labels, pred_labels, target_names=sentiment_keys)
+  print(report)
 
 if __name__ == "__main__":
   print("Loading dataset...")
@@ -86,6 +125,9 @@ if __name__ == "__main__":
 
   print("Evaluating model...")
   evaluate_model(model, test_dataset)
+
+  print("Classification Report...")
+  classification_report_model(model, test_dataset, sentiment_keys)
 
   print("Saving model...")
   model_path = "model/sentiment_model"
