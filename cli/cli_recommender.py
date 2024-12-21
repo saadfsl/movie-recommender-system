@@ -1,54 +1,6 @@
-import random
-from transformers import BertTokenizer, TFBertForSequenceClassification
-import tensorflow as tf
-import requests
 import itertools
-
-class QAgent:
-  def __init__(self, genres, release_years, rating_ranges, popularities):
-    self.actions = [
-      (genre_combo, release_year, rating_range, popularity)
-      for genre_combo in genres
-      for release_year in release_years
-      for rating_range in rating_ranges
-      for popularity in popularities
-    ]
-    self.q_table = {action: 0 for action in self.actions}
-    self.learning_rate = 0.1 # alpha
-    self.discount_factor = 0.9 # gamma
-    self.exploration_rate = 0.2 # epsilon
-
-  def get_action(self):
-    if random.random() < self.exploration_rate:
-      return random.choice(self.actions)
-    else:
-      return max(self.q_table, key=self.q_table.get)
-    
-  def update_q_value(self, action, reward):
-    old = self.q_table[action]
-    # immediate reward only (short-term)
-    self.q_table[action] = old + self.learning_rate * (reward - old)
-
-def load_model(model_path):
-  model = TFBertForSequenceClassification.from_pretrained(model_path)
-  tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-  return model, tokenizer
-
-def predict_sentiment(text, model, tokenizer, sentiment_keys):
-  tokens = tokenizer(
-    text,
-    max_length=128,
-    padding="max_length",
-    truncation=True,
-    return_tensors="tf"
-  )
-  input_ids = tokens["input_ids"]
-  attention_mask = tokens["attention_mask"]
-  outputs = model(input_ids, attention_mask=attention_mask)
-  logits = outputs.logits
-  probabilities = tf.nn.sigmoid(logits)[0].numpy()
-  sentiment = {key: probabilities[i] for i, key in enumerate(sentiment_keys)}
-  return sentiment
+from backend.utils.q_agent import QAgent
+from backend.utils.recommender import load_model, predict_sentiment, map_to_genre, get_movie_recommendations
 
 SENTIMENT_TO_GENRE = {
   "admiration": [14], # Fantasy
@@ -81,43 +33,8 @@ SENTIMENT_TO_GENRE = {
   "neutral": [18] # Drama
 }
 
-def map_to_genre(sentiment, threshold=0.01):
-  genres = set()
-  for key, value in sentiment.items():
-    if value >= threshold:
-      genres.update(SENTIMENT_TO_GENRE[key])
-  return list(genres)
-
-def get_movie_recommendations(action, api_key, current_page, num_movies=5):
-  genre_combo, release_year, rating_range, popularity = action
-
-  release_year_filter = {"primary_release_date.gte": release_year[0], "primary_release_date.lte": release_year[1]}
-  rating_filter = {"vote_average.gte": rating_range[0], "vote_average.lte": rating_range[1]}
-
-  url = "https://api.themoviedb.org/3/discover/movie"
-  params = {
-    "api_key": api_key,
-    "language": "en-US",
-    "sort_by": "popularity.desc",
-    "with_genres": ",".join(str(genre) for genre in genre_combo),
-    "vote_count.gte": popularity[0],
-    **release_year_filter,
-    **rating_filter,
-    "page": current_page,
-  }
-
-  response = requests.get(url, params=params)
-
-  if response.status_code == 200:
-    movies = response.json()["results"]
-    random.shuffle(movies)
-    return movies[:num_movies]
-  else:
-    print("Failed to fetch movie recommendations: ", response.status_code)
-    return []
-
 if __name__ == "__main__":
-  model_path = "models/sentiment_model"
+  model_path = "../models/sentiment_model"
   model, tokenizer = load_model(model_path)
   sentiment_keys = ["admiration", "amusement", "anger", "annoyance", "approval", "caring", "confusion", "curiosity", "desire", "disappointment", "disapproval", "disgust", "embarrassment", "excitement", "fear", "gratitude", "grief", "joy", "love", "nervousness", "optimism", "pride", "realization", "relief", "remorse", "sadness", "surprise", "neutral"]
 
@@ -125,16 +42,17 @@ if __name__ == "__main__":
   text = input("Describe your current mood: ")
 
   sentiment = predict_sentiment(text, model, tokenizer, sentiment_keys)
-  genres = map_to_genre(sentiment)
+  print("Sentiment: ", [(key, value) for key, value in sentiment.items() if value >= 0.05])
+  genres = map_to_genre(sentiment, SENTIMENT_TO_GENRE, threshold=0.05)
   print("Initial Genres: ", genres)
 
   release_years = [
-    ("1900-01-01", "2000-12-31"),
+    ("2015-01-01", "2024-12-31"),
     ("2000-01-01", "2015-12-31"),
-    ("2015-01-01", "2024-12-31")
+    ("1900-01-01", "2000-12-31")
   ]
-  rating_ranges = [(0, 5), (5, 7.5), (7.5, 10)]
-  popularities = [(0, 100), (100, 1000), (1000, 10000), (10000, float("inf"))]
+  rating_ranges = [(7.5, 10), (5, 7.5), (0, 5)]
+  popularities = [(10000, float("inf")), (1000, 10000), (100, 1000), (0, 100)]
 
   genre_combinations = []
   for i in range(1, len(genres) + 1):
@@ -201,3 +119,4 @@ if __name__ == "__main__":
     if values:
       top_value = max(values, key=values.get)
       print(f"Top {attr}: {top_value} ({values[top_value]} selections)")
+      
