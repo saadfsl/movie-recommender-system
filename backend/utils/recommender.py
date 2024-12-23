@@ -4,6 +4,37 @@ import tensorflow as tf
 import requests
 import os
 
+SENTIMENT_TO_GENRE = {
+  "admiration": [14], # Fantasy
+  "amusement": [35], # Comedy
+  "anger": [53], # Thriller
+  "annoyance": [10749], # Romance
+  "approval": [18], # Drama
+  "caring": [10751], # Family
+  "confusion": [12], # Adventure
+  "curiosity": [9648], # Mystery
+  "desire": [10749], # Romance
+  "disappointment": [18], # Drama
+  "disapproval": [18], # Drama
+  "disgust": [27], # Horror
+  "embarrassment": [35], # Comedy
+  "excitement": [28], # Action
+  "fear": [27], # Horror
+  "gratitude": [18], # Drama
+  "grief": [18], # Drama
+  "joy": [35], # Comedy
+  "love": [10749], # Romance
+  "nervousness": [53], # Thriller
+  "optimism": [14], # Fantasy
+  "pride": [14], # Fantasy
+  "realization": [18], # Drama
+  "relief": [18], # Drama
+  "remorse": [18], # Drama
+  "sadness": [18], # Drama
+  "surprise": [9648], # Mystery
+  "neutral": [18] # Drama
+}
+
 def load_model(model_path):
   current_dir = os.path.dirname(__file__)
   model_path = os.path.join(current_dir, model_path)
@@ -27,11 +58,11 @@ def predict_sentiment(text, model, tokenizer, sentiment_keys):
   sentiment = {key: probabilities[i] for i, key in enumerate(sentiment_keys)}
   return sentiment
 
-def map_to_genre(sentiment, sentiment_to_genre, threshold=0.01):
+def map_to_genre(sentiment, threshold=0.01):
   genres = set()
   for key, value in sentiment.items():
     if value >= threshold:
-      genres.update(sentiment_to_genre[key])
+      genres.update(SENTIMENT_TO_GENRE[key])
   return list(genres)
 
 def get_movie_recommendations(action, api_key, current_page, num_movies=5):

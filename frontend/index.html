@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Movie Recommender</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div id="page-content">
+    <div id="initial-page">
+      <h1>Welcome to Movie Recommender</h1>
+      <label for="mood">Describe your current mood:</label>
+      <input type="text" id="mood" name="mood" required>
+      <button id="submit-mood">Submit</button>
+    </div>
+
+    <div id="recommendations-page" style="display: none;">
+      <h1>Movie Recommendations</h1>
+      <ul id="recommendations-list"></ul>
+      <div>
+        <p>Did you like the recommendations?</p>
+        <button id="feedback-yes">Yes</button>
+        <button id="feedback-no">No</button>
+      </div>
+      <div id="more-recs" style="display: none;">
+        <p>Do you want more recommendations?</p>
+        <button id="get-more-recs">Yes</button>
+        <button id="reset">No</button>
+      </div>
+    </div>
+  </div>
+  <script src="./app.js"></script>
+</body>
+</html>

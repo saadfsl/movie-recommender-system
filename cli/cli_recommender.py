@@ -1,49 +1,19 @@
 import itertools
+import os
 from backend.utils.q_agent import QAgent
 from backend.utils.recommender import load_model, predict_sentiment, map_to_genre, get_movie_recommendations
-
-SENTIMENT_TO_GENRE = {
-  "admiration": [14], # Fantasy
-  "amusement": [35], # Comedy
-  "anger": [53], # Thriller
-  "annoyance": [10749], # Romance
-  "approval": [18], # Drama
-  "caring": [10751], # Family
-  "confusion": [12], # Adventure
-  "curiosity": [9648], # Mystery
-  "desire": [10749], # Romance
-  "disappointment": [18], # Drama
-  "disapproval": [18], # Drama
-  "disgust": [27], # Horror
-  "embarrassment": [35], # Comedy
-  "excitement": [28], # Action
-  "fear": [27], # Horror
-  "gratitude": [18], # Drama
-  "grief": [18], # Drama
-  "joy": [35], # Comedy
-  "love": [10749], # Romance
-  "nervousness": [53], # Thriller
-  "optimism": [14], # Fantasy
-  "pride": [14], # Fantasy
-  "realization": [18], # Drama
-  "relief": [18], # Drama
-  "remorse": [18], # Drama
-  "sadness": [18], # Drama
-  "surprise": [9648], # Mystery
-  "neutral": [18] # Drama
-}
 
 if __name__ == "__main__":
   model_path = "../models/sentiment_model"
   model, tokenizer = load_model(model_path)
   sentiment_keys = ["admiration", "amusement", "anger", "annoyance", "approval", "caring", "confusion", "curiosity", "desire", "disappointment", "disapproval", "disgust", "embarrassment", "excitement", "fear", "gratitude", "grief", "joy", "love", "nervousness", "optimism", "pride", "realization", "relief", "remorse", "sadness", "surprise", "neutral"]
 
-  tmdb_api_key = "REMOVED" # replace with your own API key
+  tmdb_api_key = os.getenv("TMDB_API_KEY") # set your TMDB API key as an environment variable
   text = input("Describe your current mood: ")
 
   sentiment = predict_sentiment(text, model, tokenizer, sentiment_keys)
   print("Sentiment: ", [(key, value) for key, value in sentiment.items() if value >= 0.05])
-  genres = map_to_genre(sentiment, SENTIMENT_TO_GENRE, threshold=0.05)
+  genres = map_to_genre(sentiment, threshold=0.05)
   print("Initial Genres: ", genres)
 
   release_years = [
