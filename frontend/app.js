@@ -2,6 +2,7 @@ const initialPage = document.getElementById("initial-page");
 const recommendationsPage = document.getElementById("recommendations-page");
 const recommendationsList = document.getElementById("recommendations-list");
 const moodInput = document.getElementById("mood");
+const modelChoice = document.getElementById("model-choice");
 
 let selectedAction = null;
 
@@ -17,6 +18,7 @@ function showRecommendationsPage() {
 
 document.getElementById("submit-mood").addEventListener("click", () => {
   const mood = moodInput.value.trim();
+  const selectedModel = modelChoice.value;
   if (!mood) {
     alert("Please enter a mood.");
     return;
@@ -25,11 +27,20 @@ document.getElementById("submit-mood").addEventListener("click", () => {
   fetch("http://localhost:5000/get-recommendations", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text: mood }),
+    body: JSON.stringify({
+      text: mood,
+      use_chatgpt: selectedModel === "chatgpt",
+    }),
   })
     .then((response) => response.json())
-    .then((movies) => {
-      displayRecommendations(movies);
+    .then((response) => {
+      if (response.recommendations) {
+        displayRecommendations(response.recommendations);
+      } else if (Array.isArray(response)) {
+        displayRecommendations(response);
+      } else {
+        alert("Failed to fetch recommendations. Please try again.");
+      }
       showRecommendationsPage();
     })
     .catch((error) => {
@@ -38,18 +49,22 @@ document.getElementById("submit-mood").addEventListener("click", () => {
     });
 });
 
-function displayRecommendations(movies) {
+function displayRecommendations(recommendations) {
   recommendationsList.innerHTML = "";
-  if (movies.length === 0) {
-    recommendationsList.innerHTML = "<li>No movies found.</li>";
-    return;
-  }
 
-  movies.forEach((movie) => {
+  if (typeof recommendations === "string") {
     const li = document.createElement("li");
-    li.innerHTML = `<strong>${movie.title}</strong> (${movie.release_date})<br>${movie.overview}`;
+    li.textContent = recommendations;
     recommendationsList.appendChild(li);
-  });
+  } else if (Array.isArray(recommendations) && recommendations.length === 0) {
+    recommendationsList.innerHTML = "<li>No movies found.</li>";
+  } else {
+    recommendations.forEach((movie) => {
+      const li = document.createElement("li");
+      li.innerHTML = `<strong>${movie.title}</strong> (${movie.release_date})<br>${movie.overview}`;
+      recommendationsList.appendChild(li);
+    });
+  }
 
   document.getElementById("feedback-yes").style.display = "inline-block";
   document.getElementById("feedback-no").style.display = "inline-block";
@@ -82,11 +97,19 @@ document.getElementById("get-more-recs").addEventListener("click", () => {
   fetch("http://localhost:5000/get-recommendations", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({}),
+    body: JSON.stringify({
+      use_chatgpt: modelChoice.value === "chatgpt",
+    }),
   })
     .then((response) => response.json())
-    .then((movies) => {
-      displayRecommendations(movies);
+    .then((response) => {
+      if (response.recommendations) {
+        displayRecommendations(response.recommendations);
+      } else if (Array.isArray(response)) {
+        displayRecommendations(response);
+      } else {
+        alert("Failed to fetch recommendations. Please try again.");
+      }
     })
     .catch((error) => {
       console.error("Error:", error);
